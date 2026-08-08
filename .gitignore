@@ -1,0 +1,5 @@
+node_modules/ 
+.env
+/RespaldoServer1/
+opencode.json
+respaldo-.env

@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración de Canciones</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body { background-color: #f4f6f9; padding: 10px 20px; color: #333; }
+        
+        /* 📊 Ajuste a un contenedor más ancho para dar espacio al panel derecho */
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        header { background: #007bff; color: white; padding: 10px; border-radius: 8px; margin-bottom: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+
+        /* Estructura limpia de dos columnas */
+        .dashboard-layout { display: flex; gap: 20px; flex-wrap: wrap; }
+        .main-column { flex: 1.6; min-width: 320px; }
+        .side-column { flex: 1; min-width: 280px; }
+
+        .card { background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        h3 { margin-bottom: 10px; color: #444; border-bottom: 2px solid #f0f0f0; padding-bottom: 5px; }
+        label { display: block; margin-bottom: 3px; font-weight: bold; font-size: 13px; color: #555; }
+        
+        /* 📝 Agregado: textarea dentro de los estilos existentes */
+        input[type="text"], input[type="url"], textarea { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        
+        /* Alto personalizado para el cuadro de la letra */
+        textarea { height: 100px; resize: vertical; font-family: inherit; }
+
+        button { background: #28a745; color: white; border: none; padding: 12px 20px; border-radius: 4px; font-size: 16px; cursor: pointer; width: 100%; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: #218838; }
+        .song-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
+        .song-item:last-child { border-bottom: none; }
+        .song-info { flex-grow: 1; }
+        .song-title { font-weight: bold; color: #007bff; }
+        .song-artist { font-size: 14px; color: #666; }
+        .btn-delete { background: #dc3545; padding: 6px 12px; font-size: 13px; width: auto; }
+        .btn-delete:hover { background: #c82333; }
+        .loading { text-align: center; color: #888; font-style: italic; padding: 10px; }
+
+        /* Estilos específicos para la nueva lista alfabética */
+        .alpha-list { list-style: none; padding: 0; }
+        .alpha-item { padding: 5px 5px; border-bottom: 1px solid #f0f0f0; font-size: 13px; color: #333; }
+        .alpha-item:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header style="display: flex; gap: 12px; margin-bottom: 12px; font-family: inherit;">
+        
+        <!-- 🔳 ÁREA CUADRADA PARA EL LOGO: Con fondo blanco, bordes redondeados y centrado -->
+        <div style="width: 70px; height: 70px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e0e0e0;">
+            <img src="launch_logo.png" alt="Logo Iglesia" style="max-width: 85%; max-height: 85%; object-fit: contain;">
+        </div>
+
+        <!-- 🟦 FRANJA AZUL CON TEXTOS: Se expande automáticamente usando flex: 1 -->
+        <div style="flex: 1; background: #007bff; color: white; border-radius: 8px; padding: 0 20px; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h1 style="font-size: 22px; margin: 0; font-weight: bold;">Administrador de Música</h1>
+            <p style="font-size: 13px; margin: 2px 0 0 0; opacity: 0.9;">Añade, edita o elimina las canciones de la aplicación al instante</p>
+        </div>
+
+    </header>
+
+
+    <!-- Contenedor del Layout en dos columnas -->
+    <div class="dashboard-layout">
+        
+        <!-- Columna Principal Izquierda (Formulario y Gestión) -->
+        <div class="main-column">
+            <!-- Formulario para agregar -->
+            <div class="card">
+                <h3>Agregar Nueva Canción</h3>
+                <form id="formCancion">
+                    <label for="titulo">Título de la canción:</label>
+                    <input type="text" id="titulo" placeholder="Ej. Tu fidelidad es grande" required>
+
+                    <!-- 📝 Artista y Tipo de canto al mismo nivel -->
+                    <div style="display: flex; gap: 15px;">
+                        <div style="flex: 1;">
+                            <label for="artista">Artista o Ministerio:</label>
+                            <input type="text" id="artista" placeholder="Ej. Marcos Witt" required>
+                        </div>
+                        <div style="flex: 1;">
+                            <label for="clase">Tipo de canto:</label>
+                            <select id="clase" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+                                <option value="Ordinario">Ordinario</option>
+                                <option value="Especial">Especial</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 📝 Campo de texto para pegar la letra completa -->
+                    <label for="letra">Letra de la canción:</label>
+                    <textarea id="letra" placeholder="Pega aquí la letra completa de la canción..."></textarea>
+
+                    <div style="display: flex; gap: 15px; margin-top: 15px;">
+                        <button type="submit" id="btnGuardar" style="background: #28a745; color: white; border: none; padding: 12px 20px; border-radius: 4px; font-size: 16px; cursor: pointer; width: 34%; font-weight: bold; transition: background 0.2s;">🚀 Guardar</button>
+                        <button type="button" id="btnLimpiarFormulario" style="background: #6c757d; color: white; border: none; padding: 12px 20px; border-radius: 4px; font-size: 16px; cursor: pointer; width: 33%; font-weight: bold; display: none; transition: background 0.2s;">✨ Nueva Canción</button>
+                        <button type="button" id="btnEliminarSeleccionada" style="background: #dc3545; color: white; border: none; padding: 12px 20px; border-radius: 4px; font-size: 16px; cursor: pointer; width: 33%; font-weight: bold; display: none; transition: background 0.2s;">🗑️ Eliminar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Columna Lateral Derecha (Filtro e Índice Alfabético) -->
+        <div class="side-column">
+            <!-- Nuevo formulario principal de filtro -->
+            <div class="card">
+                <h3>Filtro</h3>
+                <div style="display: flex; gap: 20px; margin-top: 5px;">
+                    <label style="display: inline-flex; align-items: center; gap: 5px; font-weight: normal; font-size: 14px; color: #333; cursor: pointer;">
+                        <input type="radio" name="filtroTipo" value="Ordinario" checked> Ordinario
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 5px; font-weight: normal; font-size: 14px; color: #333; cursor: pointer;">
+                        <input type="radio" name="filtroTipo" value="Especial"> Especial
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 5px; font-weight: normal; font-size: 14px; color: #333; cursor: pointer;">
+                        <input type="radio" name="filtroTipo" value="Ambos"> Ambos
+                    </label>
+                </div>
+            </div>
+            <div class="card">
+                <h3>🔤 Índice Alfabético</h3>
+                <!-- Caja de texto para escribir el filtro de búsqueda -->
+                <input type="text" id="buscadorCanciones" placeholder="🔍 Buscar canción por título..." style="width: 100%; padding: 10px; margin-top: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+                <!-- Fijamos una altura máxima aproximada para 15 filas (unos 550px) y activamos overflow-y -->
+                <div id="listaAlfabetica" style="max-height: 450px; overflow-y: auto; padding-right: 5px;">
+                    <p class="loading">Cargando índice...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const API_URL = 'https://liturgia-api-jfyu.onrender.com/api/canciones';
+    //Localmente para pruebas:
+    //const API_URL = '/api/canciones';
+    let cancionSeleccionadaId = null;
+    let todasCanciones = [];
+
+    // Función para obtener y listar canciones existentes
+    async function obtenerCanciones() {
+        const listaAlfaDiv = document.getElementById('listaAlfabetica');
+        
+        try {
+            const response = await fetch(API_URL);
+            todasCanciones = await response.json();
+            
+            if (todasCanciones.length === 0) {
+                listaAlfaDiv.innerHTML = '<p class="loading">No hay canciones registradas todavía.</p>';
+                return;
+            }
+
+            renderLista();
+        } catch (error) {
+            listaAlfaDiv.innerHTML = '<p class="loading" style="color:red;">Error al conectar con el servidor.</p>';
+        }
+    }
+
+    // 🎯 Dibuja la lista aplicando los DOS filtros a la vez:
+    // 1) Filtro principal: Tipo (Ordinario / Especial / Ambos) 2) Búsqueda por título
+    function renderLista() {
+        const listaAlfaDiv = document.getElementById('listaAlfabetica');
+        const filtroTipo = document.querySelector('input[name="filtroTipo"]:checked').value;
+        const textoBusqueda = (document.getElementById('buscadorCanciones').value || '').toLowerCase().trim();
+
+        const filtradas = todasCanciones.filter(cancion => {
+            const clase = (cancion.clase || 'Ordinario').toLowerCase();
+
+            // Filtro principal: solo muestra las que cumplen el tipo elegido
+            if (filtroTipo === 'Ordinario' && clase !== 'ordinario') return false;
+            if (filtroTipo === 'Especial' && clase !== 'especial') return false;
+
+            // Filtro secundario: búsqueda por título
+            if (textoBusqueda && !cancion.titulo.toLowerCase().includes(textoBusqueda)) return false;
+
+            return true;
+        });
+
+        if (filtradas.length === 0) {
+            listaAlfaDiv.innerHTML = '<p class="loading">No hay canciones que coincidan con el filtro.</p>';
+            return;
+        }
+
+        // 1. Ordenar las canciones alfabéticamente por título
+        const cancionesOrdenadas = [...filtradas].sort((a, b) => 
+            a.titulo.localeCompare(b.titulo, 'es', { sensitivity: 'base' })
+        );
+
+        // 2. Mostrar lista en el panel alfabético de la derecha
+        listaAlfaDiv.innerHTML = '<ul class="alpha-list"></ul>';
+        const ul = listaAlfaDiv.querySelector('ul');
+        
+        cancionesOrdenadas.forEach(cancion => {
+            const li = document.createElement('li');
+            li.className = 'alpha-item';
+            li.style.cursor = 'pointer'; // Cambia el cursor a una mano clickeable
+            li.dataset.id = cancion.id;
+            const esEspecial = (cancion.clase || 'Ordinario') === 'Especial';
+            const claseBadge = esEspecial
+                ? '<span style="font-size:11px; color:#777; margin-left:6px;">Especial</span>'
+                : '<span style="font-size:11px; color:#777; margin-left:6px;">Ordinario</span>';
+            li.innerHTML = `<strong>${cancion.titulo}</strong> ${claseBadge} <span style="font-size:13px; color:#777;">- ${cancion.artista}</span>`;
+            
+            // 🎯 EVENTO CLIC: Resalta en azul y rellena el formulario izquierdo
+            li.addEventListener('click', () => {
+                // Quitar color azul de cualquier selección previa
+                document.querySelectorAll('.alpha-item').forEach(el => {
+                    el.style.backgroundColor = 'transparent';
+                    el.style.color = '#333';
+                });
+                
+                // Pintar de azul la canción actual
+                li.style.backgroundColor = '#e6f2ff';
+                li.style.color = '#007bff';
+                cancionSeleccionadaId = cancion.id;
+                
+                // Cargar los datos en los inputs del formulario
+                document.getElementById('titulo').value = cancion.titulo;
+                document.getElementById('artista').value = cancion.artista;
+                document.getElementById('clase').value = cancion.clase || 'Ordinario';
+                document.getElementById('letra').value = cancion.letra || '';
+                document.getElementById('btnEliminarSeleccionada').style.display = "block";
+                document.getElementById('btnLimpiarFormulario').style.display = "block"; // Muestra el botón de limpiar
+                // 🎨 Cambia el diseño del botón para avisar visualmente que vas a actualizar
+                const btnGuardar = document.getElementById('btnGuardar');
+                btnGuardar.innerText = "💾 Actualizar";
+                btnGuardar.style.backgroundColor = "#007bff"; // Cambia a color azul
+            });
+
+            ul.appendChild(li);
+        });
+
+        // 🔄 Re-aplicar el resaltado azul si había una canción seleccionada
+        if (cancionSeleccionadaId !== null) {
+            const liSel = Array.from(ul.children).find(li => li.dataset.id === String(cancionSeleccionadaId));
+            if (liSel) {
+                liSel.style.backgroundColor = '#e6f2ff';
+                liSel.style.color = '#007bff';
+            }
+        }
+    }
+
+    // Evento para enviar el formulario
+    document.getElementById('formCancion').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const data = {
+            titulo: document.getElementById('titulo').value,
+            artista: document.getElementById('artista').value,
+            clase: document.getElementById('clase').value,
+            url_audio: 'https://no-audio.com', // Enlace ficticio para cumplir con la DB
+            letra: document.getElementById('letra').value
+        };
+
+        // 🎯 AQUÍ ESTÁ EL TRUCO: Si hay un ID cargado usamos PUT (Editar), de lo contrario POST (Crear)
+        const metodo = cancionSeleccionadaId ? 'PUT' : 'POST';
+        const urlPeticion = cancionSeleccionadaId ? `${API_URL}/${cancionSeleccionadaId}` : API_URL;
+
+        try {
+            const response = await fetch(urlPeticion, {
+                method: metodo,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                alert(cancionSeleccionadaId ? '¡Canción actualizada correctamente!' : '¡Canción guardada correctamente!');
+                document.getElementById('formCancion').reset();
+                cancionSeleccionadaId = null;
+                
+                // 🎯 PEGA ESTAS DOS LÍNEAS AQUÍ PARA REGRESAR EL BOTÓN A VERDE:
+                const btn = document.getElementById('btnGuardar');
+                btn.innerText = "🚀 Guardar";
+                btn.style.backgroundColor = "#28a745"; // Regresa a verde
+                document.getElementById('btnEliminarSeleccionada').style.display = "none"; // Oculta el botón eliminar
+                
+                obtenerCanciones(); 
+            }
+        } catch (error) {
+            alert('No se pudo conectar con la API.');
+        }
+    });
+
+
+    // 🛠️ Corregido: Completada la función de eliminación que faltaba
+    async function eliminarCancion(id) {
+        if (!confirm('¿Estás seguro de que deseas eliminar esta canción?')) return;
+
+        try {
+            const response = await fetch(`${API_URL}/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                alert('¡Canción eliminada correctamente!');
+                
+                // 🧹 Limpiamos los campos del formulario izquierdo
+                document.getElementById('formCancion').reset();
+                cancionSeleccionadaId = null; // Reseteamos el ID en memoria
+                
+                // 🎨 Regresamos el botón principal a su estado original (Verde)
+                const btn = document.getElementById('btnGuardar');
+                if (btn) {
+                    btn.innerText = "🚀 Guardar";
+                    btn.style.backgroundColor = "#28a745"; 
+                }
+                
+                // 🚫 Ocultamos de nuevo el botón rojo de eliminar
+                document.getElementById('btnEliminarSeleccionada').style.display = "none";
+                
+                obtenerCanciones(); // Recargamos el índice alfabético derecho
+            } else {
+                alert('No se pudo eliminar la canción.');
+            }
+        } catch (error) {
+            alert('Error de conexión al eliminar.');
+        }
+    }
+
+    const botonRojo = document.getElementById('btnEliminarSeleccionada');
+    if (botonRojo) {
+        // Eliminamos cualquier configuración previa para evitar conflictos
+        botonRojo.removeAttribute('onclick'); 
+        
+        // Conectamos el evento del clic desde cero
+        botonRojo.addEventListener('click', async () => {
+            // Si no hay ID en memoria, no avanza
+            if (!cancionSeleccionadaId) {
+                alert('Por favor, selecciona una canción del índice primero.');
+                return;
+            }
+
+            // Ventana de confirmación obligatoria
+            if (!confirm('¿Estás seguro de que deseas eliminar permanentemente esta canción de la base de datos?')) return;
+
+            try {
+                const response = await fetch(`${API_URL}/${cancionSeleccionadaId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('¡Canción eliminada correctamente!');
+                    
+                    // Limpiamos los cuadros de texto y devolvemos la interfaz a verde
+                    document.getElementById('formCancion').reset();
+                    cancionSeleccionadaId = null;
+                    
+                    const btnG = document.getElementById('btnGuardar');
+                    if (btnG) {
+                        btnG.innerText = "🚀 Guardar";
+                        btnG.style.backgroundColor = "#28a745"; // Regresa a verde
+                    }
+                    
+                    // Ocultamos el botón rojo de nuevo
+                    document.getElementById('btnEliminarSeleccionada').style.display = "none";
+                    
+                    // Refrescamos el índice derecho
+                    obtenerCanciones(); 
+                } else {
+                    alert('El servidor no pudo eliminar la canción.');
+                }
+            } catch (error) {
+                alert('Error de conexión al intentar comunicarse con Render.');
+            }
+        });
+    }
+
+    // 🎯 Lógica para el botón "✨ Nueva Canción" (Limpiar campos)
+    const botonLimpiar = document.getElementById('btnLimpiarFormulario');
+    if (botonLimpiar) {
+        botonLimpiar.addEventListener('click', () => {
+            // Vaciar el formulario
+            document.getElementById('formCancion').reset();
+            cancionSeleccionadaId = null; // Olvidamos el ID en edición
+
+            // Regresar el botón principal a Verde (Modo Guardar)
+            const btnG = document.getElementById('btnGuardar');
+            if (btnG) {
+                btnG.innerText = "🚀 Guardar";
+                btnG.style.backgroundColor = "#28a745";
+            }
+
+            // Ocultar los botones de edición/eliminación
+            document.getElementById('btnEliminarSeleccionada').style.display = "none";
+            botonLimpiar.style.display = "none";
+
+            // Quitar el resaltado azul de la lista de la derecha
+            document.querySelectorAll('.alpha-item').forEach(el => {
+                el.style.backgroundColor = 'transparent';
+                el.style.color = '#333';
+            });
+        });
+    }
+
+    const inputBuscador = document.getElementById('buscadorCanciones');
+    if (inputBuscador) {
+        // Escuchamos cada letra que el usuario escribe ('input') y redibujamos con el doble filtro
+        inputBuscador.addEventListener('input', renderLista);
+    } 
+
+    // 🎯 Filtro principal: cada vez que se cambie el radio se redibuja la lista
+    document.querySelectorAll('input[name="filtroTipo"]').forEach(radio => {
+        radio.addEventListener('change', renderLista);
+    });
+    
+    // Cargar las canciones al abrir la página
+    obtenerCanciones();
+
+</script>
+
+</body>
+</html>
