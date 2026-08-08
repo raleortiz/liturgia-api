@@ -56,6 +56,9 @@ gestionarlo sin tocar la base de datos.
 Interfaz web incluida en la raíz del servidor (`public/admin.html`) para
 administrar las canciones.
 
+**👉 Panel de administración:** 
+https://liturgia-api-jfyu.onrender.com
+
 ---
 
 ## 🛠️ Tecnologías

@@ -356,9 +356,12 @@ app.get('/api/lecturas/hoy', async (req, res) => {
 // 3.2 RUTA: Información litúrgica del día desde la tabla dias_liturgicos
 app.get('/api/dia', async (req, res) => {
   try {
-    // Hora Colombia = UTC-5, sin horario de verano
-    const col = new Date(new Date().getTime() - 5 * 60 * 60 * 1000);
-    const fechaHoy = `${col.getUTCFullYear()}-${String(col.getUTCMonth() + 1).padStart(2, '0')}-${String(col.getUTCDate()).padStart(2, '0')}`;
+    // El mismo corte de 5:00am que usa la caché: antes de las 5 de la
+    // mañana hora Colombia todavía se considera "ayer", así un usuario que
+    // abre la app de madrugada ve las lecturas del día litúrgico actual
+    // (que sí están guardadas) en vez de un 404 por "hoy" aún sin publicar.
+    const { anio, mes, dia } = fechaLiturgicaColombia();
+    const fechaHoy = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
     const result = await pool.query(
       `SELECT fecha, dia_semana, titulo_fiesta, primera_lectura, salmo,
               segunda_lectura, evangelio, actualizado_en
