@@ -4,6 +4,8 @@ const express = require('express');
 const cheerio = require('cheerio');
 const cors = require('cors');
 const { Pool } = require('pg'); // Mover arriba
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,11 +13,130 @@ const PORT = process.env.PORT || 3000;
 // 1. CONFIGURACIÓN DEL CONFIG DE EXPRESS Y PERMISOS (DEBE IR PRIMERO)
 app.use(cors());
 app.use(express.json());
+app.set('trust proxy', 1);
+
+// 1.1 SEGURIDAD DEL PANEL ADMIN: LOGIN CON USUARIO (EMAIL) Y CONTRASEÑA
+const JWT_SECRET = process.env.JWT_SECRET || 'cambia_este_secreto_en_render';
+const NOMBRE_COOKIE = 'token_admin';
+
+function obtenerCookie(req, nombre) {
+  const raw = req.headers.cookie || '';
+  const par = raw.split(';').map(c => c.trim()).find(c => c.startsWith(nombre + '='));
+  return par ? decodeURIComponent(par.slice(nombre.length + 1)) : null;
+}
+
+function verificarToken(req) {
+  const token = obtenerCookie(req, NOMBRE_COOKIE);
+  if (!token) return null;
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Busca al admin actual en la base de datos (datos frescos: rol y permisos)
+async function adminDeSesion(req) {
+  const payload = verificarToken(req);
+  if (!payload) return null;
+  try {
+    const result = await pool.query(
+      'SELECT id, email, rol, permisos FROM admins WHERE id = $1',
+      [payload.id]
+    );
+    return result.rows[0] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Para páginas: si no hay sesión, manda al login
+const requiereAuth = async (req, res, next) => {
+  const admin = await adminDeSesion(req);
+  if (!admin) return res.redirect('/login');
+  req.admin = admin;
+  next();
+};
+
+// Revisa que el usuario tenga un permiso concreto (o sea superusuario)
+const requierePermiso = (permiso) => async (req, res, next) => {
+  const admin = await adminDeSesion(req);
+  if (!admin) return res.redirect('/login');
+  if (admin.rol !== 'superadmin' && !(admin.permisos || []).includes(permiso)) {
+    return res.status(403).send('No tienes permiso para acceder a esta sección.');
+  }
+  req.admin = admin;
+  next();
+};
+
+// Para la API: exige sesión + un permiso concreto (responde JSON)
+const requierePermisoApi = (permiso) => async (req, res, next) => {
+  const admin = await adminDeSesion(req);
+  if (!admin) return res.status(401).json({ error: 'No autorizado. Inicia sesión primero.' });
+  if (admin.rol !== 'superadmin' && !(admin.permisos || []).includes(permiso)) {
+    return res.status(403).json({ error: 'No tienes permiso para esta acción.' });
+  }
+  req.admin = admin;
+  next();
+};
+
+// Solo el superusuario
+const requiereSuperadmin = async (req, res, next) => {
+  const admin = await adminDeSesion(req);
+  if (!admin) return res.redirect('/login');
+  if (admin.rol !== 'superadmin') {
+    return res.status(403).send('Acceso restringido al superusuario.');
+  }
+  req.admin = admin;
+  next();
+};
+
+// 🚪 Página de login (pública)
+app.get('/login', (req, res) => {
+  if (verificarToken(req)) return res.redirect('/');
+  res.sendFile(__dirname + '/public/login.html');
+});
+
+// 🔒 Bloquea el acceso directo a /admin.html (debe ir ANTES de express.static)
+app.use('/admin.html', requierePermiso('cancionero'));
+
 // 🛠️ Hace que la carpeta "public" sea accesible desde la web
 app.use(express.static('public'));
-// 🏠 Ruta principal: Cuando entres a la URL base, abrirá tu Panel de Administración
-app.get('/', (req, res) => {
+
+// 🏠 Ruta principal: según el rol y los permisos, manda a la pantalla correcta
+app.get('/', requiereAuth, (req, res) => {
+  if (req.admin.rol === 'superadmin') return res.redirect('/superadmin');
+
+  const permisos = req.admin.permisos || [];
+  const puedeCancionero = permisos.includes('cancionero');
+  const puedeMensajes = permisos.includes('mensajes');
+
+  // Si solo tiene un permiso, se le lleva directo a esa pantalla
+  if (puedeCancionero && !puedeMensajes) return res.redirect('/cancionero');
+  if (puedeMensajes && !puedeCancionero) return res.redirect('/mensajes');
+
+  // Con varios (o ninguno) se le pregunta a dónde quiere ir
+  res.redirect('/home');
+});
+
+// 🏠 Página de inicio con los botones (Cancionero / Mensaje)
+app.get('/home', requiereAuth, (req, res) => {
+  res.sendFile(__dirname + '/public/home.html');
+});
+
+// 🎵 Cancionero (gestión de canciones) - requiere permiso
+app.get('/cancionero', requierePermiso('cancionero'), (req, res) => {
   res.sendFile(__dirname + '/public/admin.html');
+});
+
+// 💬 Mensajes de la parroquia - requiere permiso
+app.get('/mensajes', requierePermiso('mensajes'), (req, res) => {
+  res.sendFile(__dirname + '/public/mensajes.html');
+});
+
+// 👤 Gestión de usuarios - solo superusuario
+app.get('/superadmin', requiereSuperadmin, (req, res) => {
+  res.sendFile(__dirname + '/public/gestion.html');
 });
 
 // 2. CONEXIÓN A POSTGRESQL (MOVER ARRIBA)
@@ -39,6 +160,156 @@ const pool = new Pool({
   }
 });
 
+// 2.1 ENDPOINTS DE AUTENTICACIÓN (LOGIN / LOGOUT / SESIÓN)
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'El correo y la contraseña son obligatorios.' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT * FROM admins WHERE LOWER(email) = LOWER($1)',
+      [String(email).trim()]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
+    }
+
+    const admin = result.rows[0];
+    const valida = bcrypt.compareSync(password, admin.password_hash);
+    if (!valida) {
+      return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
+    }
+
+    const token = jwt.sign(
+      { id: admin.id, email: admin.email, rol: admin.rol },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    const esSeguro = req.secure || process.env.COOKIE_SECURE === 'true';
+    res.cookie(NOMBRE_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: esSeguro,
+      maxAge: 8 * 60 * 60 * 1000
+    });
+    res.json({ ok: true, email: admin.email, rol: admin.rol });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al iniciar sesión.' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie(NOMBRE_COOKIE);
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  const admin = await adminDeSesion(req);
+  if (!admin) return res.status(401).json({ error: 'No autorizado' });
+  res.json({ email: admin.email, rol: admin.rol, permisos: admin.permisos || [] });
+});
+
+// 2.2 GESTIÓN DE USUARIOS (SOLO SUPERUSUARIO)
+const PERMISOS_VALIDOS = ['cancionero', 'mensajes'];
+
+app.get('/api/admin/usuarios', requiereSuperadmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, rol, permisos, created_at FROM admins ORDER BY id ASC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al listar los usuarios.' });
+  }
+});
+
+app.post('/api/admin/usuarios', requiereSuperadmin, async (req, res) => {
+  const { email, password, permisos } = req.body;
+  const emailLimpio = String(email || '').trim().toLowerCase();
+  if (!emailLimpio || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpio)) {
+    return res.status(400).json({ error: 'Correo no válido.' });
+  }
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+  }
+  const permisosFiltrados = (Array.isArray(permisos) ? permisos : [])
+    .filter(p => PERMISOS_VALIDOS.includes(p));
+  try {
+    const hash = bcrypt.hashSync(String(password), 10);
+    const result = await pool.query(
+      'INSERT INTO admins (email, password_hash, rol, permisos) VALUES ($1, $2, $3, $4) RETURNING id, email, rol, permisos, created_at',
+      [emailLimpio, hash, 'admin', permisosFiltrados]
+    );
+    res.status(201).json({ message: 'Usuario creado.', usuario: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Ese correo ya está registrado.' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Error al crear el usuario.' });
+  }
+});
+
+app.put('/api/admin/usuarios/:id', requiereSuperadmin, async (req, res) => {
+  const { id } = req.params;
+  const { permisos, password } = req.body;
+  try {
+    const existe = await pool.query('SELECT rol FROM admins WHERE id = $1', [id]);
+    if (existe.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+    if (existe.rows[0].rol === 'superadmin') {
+      return res.status(400).json({ error: 'El superusuario no se puede editar desde aquí.' });
+    }
+    const permisosFiltrados = (Array.isArray(permisos) ? permisos : [])
+      .filter(p => PERMISOS_VALIDOS.includes(p));
+    if (password) {
+      if (String(password).length < 6) {
+        return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+      }
+      const hash = bcrypt.hashSync(String(password), 10);
+      await pool.query(
+        'UPDATE admins SET permisos = $1, password_hash = $2 WHERE id = $3',
+        [permisosFiltrados, hash, id]
+      );
+    } else {
+      await pool.query(
+        'UPDATE admins SET permisos = $1 WHERE id = $2',
+        [permisosFiltrados, id]
+      );
+    }
+    res.json({ message: 'Usuario actualizado.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar el usuario.' });
+  }
+});
+
+app.delete('/api/admin/usuarios/:id', requiereSuperadmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existe = await pool.query('SELECT id, rol FROM admins WHERE id = $1', [id]);
+    if (existe.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+    if (existe.rows[0].rol === 'superadmin') {
+      return res.status(400).json({ error: 'El superusuario no se puede eliminar.' });
+    }
+    if (String(existe.rows[0].id) === String(req.admin.id)) {
+      return res.status(400).json({ error: 'No puedes eliminarte a ti mismo.' });
+    }
+    await pool.query('DELETE FROM admins WHERE id = $1', [id]);
+    res.json({ message: 'Usuario eliminado.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al eliminar el usuario.' });
+  }
+});
+
 
 // 3. RUTAS DE LAS CANCIONES (MOVER ARRIBA PARA QUE SE REGISTREN ANTES DEL SCRAPER)
 app.get('/api/canciones', async (req, res) => {
@@ -51,7 +322,7 @@ app.get('/api/canciones', async (req, res) => {
   }
 });
 
-app.post('/api/canciones', async (req, res) => {
+app.post('/api/canciones', requierePermisoApi('cancionero'), async (req, res) => {
   const { titulo, artista, clase, url_audio, letra } = req.body;
   
   if (!titulo || !artista || !url_audio) {
@@ -68,7 +339,7 @@ app.post('/api/canciones', async (req, res) => {
   }
 });
 
-app.delete('/api/canciones/:id', async (req, res) => {
+app.delete('/api/canciones/:id', requierePermisoApi('cancionero'), async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('DELETE FROM canciones WHERE id = $1', [id]);
@@ -80,7 +351,7 @@ app.delete('/api/canciones/:id', async (req, res) => {
 });
 
 // 3.1 NUEVA RUTA: Actualizar una canción existente por ID
-app.put('/api/canciones/:id', async (req, res) => {
+app.put('/api/canciones/:id', requierePermisoApi('cancionero'), async (req, res) => {
   const { id } = req.params;
   const { titulo, artista, clase, url_audio, letra } = req.body;
 
@@ -135,6 +406,49 @@ const inicializarTablaCanciones = async () => {
 };
 
 inicializarTablaCanciones();
+
+// 4.1 TABLA DE ADMINISTRADORES (LOGIN DEL PANEL)
+const inicializarTablaAdmins = async () => {
+  const querySQL = `
+    CREATE TABLE IF NOT EXISTS admins (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        rol VARCHAR(50) NOT NULL DEFAULT 'admin',
+        permisos TEXT[] NOT NULL DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  try {
+    await pool.query(querySQL);
+    // Columna de permisos por si la tabla ya existía sin ella
+    await pool.query("ALTER TABLE admins ADD COLUMN IF NOT EXISTS permisos TEXT[] NOT NULL DEFAULT '{}';");
+
+    // Primer superusuario (solo se crea si no existe)
+    const emailAdmin = (process.env.ADMIN_EMAIL || 'raleortizb@gmail.com').trim().toLowerCase();
+    const passwordAdmin = process.env.ADMIN_PASSWORD || 'Aleo@94370733';
+    const existe = await pool.query('SELECT id, permisos FROM admins WHERE LOWER(email) = LOWER($1)', [emailAdmin]);
+    if (existe.rows.length === 0) {
+      const hash = bcrypt.hashSync(passwordAdmin, 10);
+      await pool.query(
+        'INSERT INTO admins (email, password_hash, rol, permisos) VALUES ($1, $2, $3, $4)',
+        [emailAdmin, hash, 'superadmin', ['cancionero', 'mensajes']]
+      );
+      console.log(`✅ Superusuario creado: ${emailAdmin}`);
+    } else {
+      // Asegura que el superusuario siempre tenga acceso a todo
+      await pool.query(
+        "UPDATE admins SET permisos = ARRAY['cancionero','mensajes'] WHERE id = $1 AND rol = 'superadmin' AND NOT (permisos @> ARRAY['cancionero','mensajes'])",
+        [existe.rows[0].id]
+      );
+      console.log('✅ Tabla de administradores verificada.');
+    }
+  } catch (err) {
+    console.error('❌ Error al inicializar la tabla de administradores:', err);
+  }
+};
+
+inicializarTablaAdmins();
 
 // 5. Fuente 1: liturgiadelashoras.github.io (Primera/Segunda Lectura, Salmo) ----------
 

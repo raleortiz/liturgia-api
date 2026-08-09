@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios · Superadmin</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body { background-color: #f4f6f9; padding: 10px 20px; color: #333; }
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        header { display: flex; gap: 12px; margin-bottom: 20px; }
+        .logo-box { width: 70px; height: 70px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e0e0e0; flex-shrink: 0; }
+        .logo-box img { max-width: 85%; max-height: 85%; object-fit: contain; }
+        .franja { flex: 1; background: #007bff; color: white; border-radius: 8px; padding: 0 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .franja .txt { flex: 1; }
+        .franja h1 { font-size: 22px; margin: 0; font-weight: bold; }
+        .franja p { font-size: 13px; margin: 2px 0 0 0; opacity: 0.9; }
+        .btn-cabecera { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .card h3 { margin-bottom: 15px; color: #444; border-bottom: 2px solid #f0f0f0; padding-bottom: 8px; }
+        label { display: block; margin-bottom: 3px; font-weight: bold; font-size: 13px; color: #555; }
+        input[type="email"], input[type="password"], input[type="text"] { width: 100%; padding: 9px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .fila { display: flex; gap: 15px; flex-wrap: wrap; }
+        .fila > div { flex: 1; min-width: 220px; }
+        .checks { display: flex; gap: 20px; margin: 8px 0 15px; }
+        .checks label { display: inline-flex; align-items: center; gap: 6px; font-weight: normal; font-size: 14px; color: #333; cursor: pointer; }
+
+        .btn { background: #28a745; color: white; border: none; padding: 11px 18px; border-radius: 4px; font-size: 15px; cursor: pointer; font-weight: bold; }
+        .btn:hover { background: #218838; }
+        .btn-azul { background: #007bff; }
+        .btn-azul:hover { background: #0056b3; }
+        .btn-gris { background: #6c757d; }
+        .btn-gris:hover { background: #5a6268; }
+        .btn-rojo { background: #dc3545; padding: 6px 12px; font-size: 13px; width: auto; }
+        .btn-rojo:hover { background: #c82333; }
+        .btn-editar { background: #ffc107; color: #333; padding: 6px 12px; font-size: 13px; width: auto; }
+        .btn-editar:hover { background: #e0a800; }
+
+        #mensaje { margin-top: 12px; font-size: 14px; min-height: 20px; }
+        #mensaje.error { color: #dc3545; }
+        #mensaje.ok { color: #28a745; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: middle; }
+        th { background: #f8f9fa; color: #555; font-size: 13px; }
+        .badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 12px; margin-right: 5px; }
+        .badge-super { background: #ffc107; color: #333; }
+        .badge-admin { background: #e9ecef; color: #555; }
+        .badge-perm { background: #d4edda; color: #155724; }
+        .badge-sinperm { background: #f8d7da; color: #721c24; }
+        .rol-super { color: #999; font-size: 12px; }
+        .loading { text-align: center; color: #888; font-style: italic; padding: 15px; }
+        .oculto { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="logo-box">
+            <img src="launch_logo.png" alt="Logo Iglesia">
+        </div>
+        <div class="franja">
+            <div class="txt">
+                <h1>Administración de Usuarios</h1>
+                <p>Registra y controla quién puede entrar al panel</p>
+            </div>
+            <button type="button" id="btnVolver" class="btn-cabecera">Volver al inicio</button>
+            <button type="button" id="btnCerrarSesion" class="btn-cabecera">Cerrar sesión</button>
+        </div>
+    </header>
+
+    <!-- Formulario para crear usuario -->
+    <div class="card" id="cardNuevo">
+        <h3>➕ Registrar nuevo usuario</h3>
+        <form id="formNuevoUsuario">
+            <div class="fila">
+                <div>
+                    <label for="email">Correo del usuario (será su usuario):</label>
+                    <input type="email" id="email" placeholder="usuario@correo.com" required>
+                </div>
+                <div>
+                    <label for="password">Contraseña (mínimo 6 caracteres):</label>
+                    <input type="password" id="password" placeholder="••••••••" required>
+                </div>
+            </div>
+            <label>Selecciona las secciones a las que puede entrar:</label>
+            <div class="checks">
+                <label><input type="checkbox" id="permCancionero" value="cancionero" checked> 🎵 Cancionero</label>
+                <label><input type="checkbox" id="permMensajes" value="mensajes"> 💬 Mensaje</label>
+            </div>
+            <button type="submit" class="btn">Crear Usuario</button>
+        </form>
+        <div id="mensaje"></div>
+    </div>
+
+    <!-- Tarjeta para editar un usuario -->
+    <div class="card oculto" id="cardEditar">
+        <h3>✏️ Editar usuario</h3>
+        <form id="formEditarUsuario">
+            <div class="fila">
+                <div>
+                    <label>Correo:</label>
+                    <input type="email" id="emailEditar" readonly style="background:#f0f0f0;">
+                </div>
+                <div>
+                    <label for="passwordEditar">Nueva contraseña (dejar vacío para no cambiarla):</label>
+                    <input type="password" id="passwordEditar" placeholder="••••••••">
+                </div>
+            </div>
+            <label>Selecciona las secciones a las que puede entrar:</label>
+            <div class="checks">
+                <label><input type="checkbox" id="permCancioneroEditar" value="cancionero"> 🎵 Cancionero</label>
+                <label><input type="checkbox" id="permMensajesEditar" value="mensajes"> 💬 Mensaje</label>
+            </div>
+            <button type="submit" class="btn btn-azul">Guardar Cambios</button>
+            <button type="button" id="btnCancelarEditar" class="btn btn-gris">Cancelar</button>
+        </form>
+        <div id="mensajeEditar"></div>
+    </div>
+
+    <!-- Lista de usuarios -->
+    <div class="card">
+        <h3>👥 Usuarios registrados</h3>
+        <div id="listaUsuarios">
+            <p class="loading">Cargando usuarios...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let usuarios = [];
+    let usuarioEditando = null;
+
+    async function pedir(metodo, url, cuerpo) {
+        const opciones = { method: metodo, headers: { 'Content-Type': 'application/json' } };
+        if (cuerpo) opciones.body = JSON.stringify(cuerpo);
+        const response = await fetch(url, opciones);
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+    }
+
+    function mostrarMensaje(el, texto, tipo) {
+        el.textContent = texto;
+        el.className = tipo || '';
+    }
+
+    async function cargarUsuarios() {
+        const div = document.getElementById('listaUsuarios');
+        try {
+            const { response, data } = await pedir('GET', '/api/admin/usuarios');
+            if (response.status === 403) {
+                window.location.href = '/home';
+                return;
+            }
+            if (!response.ok) {
+                div.innerHTML = '<p class="loading" style="color:red;">Error al cargar los usuarios.</p>';
+                return;
+            }
+            usuarios = data;
+            renderUsuarios();
+        } catch (error) {
+            div.innerHTML = '<p class="loading" style="color:red;">Error de conexión con el servidor.</p>';
+        }
+    }
+
+    function renderUsuarios() {
+        const div = document.getElementById('listaUsuarios');
+        if (usuarios.length === 0) {
+            div.innerHTML = '<p class="loading">No hay usuarios registrados todavía.</p>';
+            return;
+        }
+        let html = '<table><thead><tr><th>Correo</th><th>Rol</th><th>Acceso a secciones</th><th>Acciones</th></tr></thead><tbody>';
+        for (const u of usuarios) {
+            const esSuper = u.rol === 'superadmin';
+            const rolBadge = esSuper
+                ? '<span class="badge badge-super">Superusuario</span>'
+                : '<span class="badge badge-admin">Admin</span>';
+            let perms = '';
+            if (esSuper) {
+                perms = '<span class="badge badge-super">Todos</span>';
+            } else {
+                const p = u.permisos || [];
+                if (p.length === 0) {
+                    perms = '<span class="badge badge-sinperm">Sin secciones</span>';
+                } else {
+                    if (p.includes('cancionero')) perms += '<span class="badge badge-perm">🎵 Cancionero</span>';
+                    if (p.includes('mensajes')) perms += '<span class="badge badge-perm">💬 Mensaje</span>';
+                }
+            }
+            let acciones = '<span class="rol-super">No editable</span>';
+            if (!esSuper) {
+                acciones = `
+                    <button class="btn btn-editar" onclick="editarUsuario(${u.id})">Editar</button>
+                    <button class="btn btn-rojo" onclick="eliminarUsuario(${u.id})">Eliminar</button>`;
+            }
+            html += `<tr>
+                <td>${u.email}</td>
+                <td>${rolBadge}</td>
+                <td>${perms}</td>
+                <td style="white-space:nowrap;">${acciones}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        div.innerHTML = html;
+    }
+
+    // Crear usuario
+    document.getElementById('formNuevoUsuario').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const mensaje = document.getElementById('mensaje');
+        const permisos = [];
+        if (document.getElementById('permCancionero').checked) permisos.push('cancionero');
+        if (document.getElementById('permMensajes').checked) permisos.push('mensajes');
+
+        const { response, data } = await pedir('POST', '/api/admin/usuarios', {
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+            permisos
+        });
+
+        if (response.ok) {
+            mostrarMensaje(mensaje, '✅ Usuario creado correctamente.', 'ok');
+            document.getElementById('formNuevoUsuario').reset();
+            document.getElementById('permCancionero').checked = true;
+            cargarUsuarios();
+        } else {
+            mostrarMensaje(mensaje, '❌ ' + (data.error || 'No se pudo crear el usuario.'), 'error');
+        }
+    });
+
+    // Editar usuario
+    function editarUsuario(id) {
+        const u = usuarios.find(x => x.id === id);
+        if (!u) return;
+        usuarioEditando = u;
+        document.getElementById('emailEditar').value = u.email;
+        document.getElementById('passwordEditar').value = '';
+        document.getElementById('permCancioneroEditar').checked = (u.permisos || []).includes('cancionero');
+        document.getElementById('permMensajesEditar').checked = (u.permisos || []).includes('mensajes');
+        document.getElementById('cardEditar').classList.remove('oculto');
+        document.getElementById('cardNuevo').classList.add('oculto');
+        document.getElementById('cardEditar').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    document.getElementById('formEditarUsuario').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const mensaje = document.getElementById('mensajeEditar');
+        const permisos = [];
+        if (document.getElementById('permCancioneroEditar').checked) permisos.push('cancionero');
+        if (document.getElementById('permMensajesEditar').checked) permisos.push('mensajes');
+
+        const cuerpo = { permisos };
+        const nuevaPass = document.getElementById('passwordEditar').value;
+        if (nuevaPass) cuerpo.password = nuevaPass;
+
+        const { response, data } = await pedir('PUT', '/api/admin/usuarios/' + usuarioEditando.id, cuerpo);
+
+        if (response.ok) {
+            mostrarMensaje(mensaje, '✅ Usuario actualizado correctamente.', 'ok');
+            usuarioEditando = null;
+            document.getElementById('cardEditar').classList.add('oculto');
+            document.getElementById('cardNuevo').classList.remove('oculto');
+            cargarUsuarios();
+        } else {
+            mostrarMensaje(mensaje, '❌ ' + (data.error || 'No se pudo actualizar.'), 'error');
+        }
+    });
+
+    document.getElementById('btnCancelarEditar').addEventListener('click', () => {
+        usuarioEditando = null;
+        document.getElementById('cardEditar').classList.add('oculto');
+        document.getElementById('cardNuevo').classList.remove('oculto');
+    });
+
+    // Eliminar usuario
+    async function eliminarUsuario(id) {
+        const u = usuarios.find(x => x.id === id);
+        if (!u) return;
+        if (!confirm('¿Eliminar al usuario ' + u.email + '? Ya no podrá entrar al panel.')) return;
+        const { response, data } = await pedir('DELETE', '/api/admin/usuarios/' + id);
+        if (response.ok) {
+            cargarUsuarios();
+        } else {
+            alert(data.error || 'No se pudo eliminar el usuario.');
+        }
+    }
+
+    document.getElementById('btnVolver').addEventListener('click', () => { window.location.href = '/'; });
+    document.getElementById('btnCerrarSesion').addEventListener('click', async () => {
+        try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (error) {}
+        window.location.href = '/login';
+    });
+
+    cargarUsuarios();
+</script>
+
+</body>
+</html>

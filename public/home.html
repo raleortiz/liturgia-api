@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inicio · Administración</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body { background-color: #f4f6f9; min-height: 100vh; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+        header { display: flex; gap: 12px; margin-bottom: 30px; }
+        .logo-box { width: 70px; height: 70px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e0e0e0; flex-shrink: 0; }
+        .logo-box img { max-width: 85%; max-height: 85%; object-fit: contain; }
+        .franja { flex: 1; background: #007bff; color: white; border-radius: 8px; padding: 0 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .franja .txt { flex: 1; }
+        .franja h1 { font-size: 22px; margin: 0; font-weight: bold; }
+        .franja p { font-size: 13px; margin: 2px 0 0 0; opacity: 0.9; }
+        .btn-cerrar { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+
+        h2.titulo { text-align: center; color: #444; margin-bottom: 25px; font-size: 20px; }
+        .botones { display: flex; flex-wrap: wrap; gap: 25px; justify-content: center; }
+        .tarjeta { background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); padding: 40px 30px; width: 260px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s; text-decoration: none; color: #333; display: block; }
+        .tarjeta:hover { transform: translateY(-4px); border-color: #007bff; box-shadow: 0 8px 20px rgba(0,123,255,0.15); }
+        .icono { font-size: 52px; margin-bottom: 15px; }
+        .tarjeta h3 { font-size: 20px; margin-bottom: 6px; color: #007bff; }
+        .tarjeta p { font-size: 13px; color: #777; }
+        .sin-acceso { text-align: center; background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); padding: 40px; margin: 0 auto; max-width: 460px; }
+        .sin-acceso .icono { font-size: 44px; }
+        .sin-acceso p { color: #777; margin-bottom: 15px; }
+        .loading { text-align: center; color: #888; font-style: italic; padding: 30px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="logo-box">
+            <img src="launch_logo.png" alt="Logo Iglesia">
+        </div>
+        <div class="franja">
+            <div class="txt">
+                <h1>Administración de la Parroquia</h1>
+                <p>Selecciona la sección a la que deseas entrar</p>
+            </div>
+            <button type="button" id="btnCerrarSesion" class="btn-cerrar">Cerrar sesión</button>
+        </div>
+    </header>
+
+    <h2 class="titulo">¿A dónde quieres ir?</h2>
+
+    <div id="contenidoBotones">
+        <p class="loading">Cargando tus permisos...</p>
+    </div>
+</div>
+
+<script>
+    async function verificarSesion() {
+        try {
+            const response = await fetch('/api/auth/me');
+            if (!response.ok) {
+                window.location.href = '/login';
+                return null;
+            }
+            return await response.json();
+        } catch (error) {
+            window.location.href = '/login';
+            return null;
+        }
+    }
+
+    document.getElementById('btnCerrarSesion').addEventListener('click', async () => {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (error) {}
+        window.location.href = '/login';
+    });
+
+    (async () => {
+        const datos = await verificarSesion();
+        if (!datos) return;
+
+        const esSuper = datos.rol === 'superadmin';
+        const permisos = datos.permisos || [];
+        const puedeCancionero = esSuper || permisos.includes('cancionero');
+        const puedeMensajes = esSuper || permisos.includes('mensajes');
+
+        const div = document.getElementById('contenidoBotones');
+        if (!puedeCancionero && !puedeMensajes) {
+            div.innerHTML = `
+                <div class="sin-acceso">
+                    <div class="icono">🔒</div>
+                    <h3>Sin secciones asignadas</h3>
+                    <p>Todavía no tienes acceso a ninguna sección. Contacta al administrador para que te habilite los permisos.</p>
+                    <button type="button" id="btnSalirSinAcceso" class="btn-cerrar" style="background:#dc3545; border-color:#dc3545;">Cerrar sesión</button>
+                </div>`;
+            document.getElementById('btnSalirSinAcceso').addEventListener('click', async () => {
+                try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (error) {}
+                window.location.href = '/login';
+            });
+            return;
+        }
+
+        let html = '<div class="botones">';
+        if (puedeCancionero) {
+            html += `
+                <a class="tarjeta" href="/cancionero">
+                    <div class="icono">🎵</div>
+                    <h3>Cancionero</h3>
+                    <p>Administra las canciones de la aplicación</p>
+                </a>`;
+        }
+        if (puedeMensajes) {
+            html += `
+                <a class="tarjeta" href="/mensajes">
+                    <div class="icono">💬</div>
+                    <h3>Mensaje</h3>
+                    <p>Mensajes de la parroquia para los fieles</p>
+                </a>`;
+        }
+        html += '</div>';
+        div.innerHTML = html;
+    })();
+</script>
+
+</body>
+</html>

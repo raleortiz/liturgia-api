@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mensajes de la Parroquia</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body { background-color: #f4f6f9; min-height: 100vh; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+        header { display: flex; gap: 12px; margin-bottom: 30px; }
+        .logo-box { width: 70px; height: 70px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e0e0e0; flex-shrink: 0; }
+        .logo-box img { max-width: 85%; max-height: 85%; object-fit: contain; }
+        .franja { flex: 1; background: #007bff; color: white; border-radius: 8px; padding: 0 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .franja .txt { flex: 1; }
+        .franja h1 { font-size: 22px; margin: 0; font-weight: bold; }
+        .franja p { font-size: 13px; margin: 2px 0 0 0; opacity: 0.9; }
+        .btn-cerrar { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+
+        .construccion { background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); padding: 60px 30px; text-align: center; }
+        .construccion .icono { font-size: 64px; margin-bottom: 15px; }
+        .construccion h2 { font-size: 26px; color: #444; margin-bottom: 10px; }
+        .construccion p { color: #777; font-size: 15px; max-width: 420px; margin: 0 auto 25px; line-height: 1.6; }
+        .construccion a { display: inline-block; background: #007bff; color: white; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 15px; }
+        .construccion a:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="logo-box">
+            <img src="launch_logo.png" alt="Logo Iglesia">
+        </div>
+        <div class="franja">
+            <div class="txt">
+                <h1>Mensajes de la Parroquia</h1>
+                <p>Comunicados y avisos para los fieles</p>
+            </div>
+            <button type="button" id="btnCerrarSesion" class="btn-cerrar">Cerrar sesión</button>
+        </div>
+    </header>
+
+    <div class="construccion">
+        <div class="icono">🚧</div>
+        <h2>En construcción</h2>
+        <p>Esta sección de mensajes de la parroquia está en desarrollo. Pronto podrás publicar y administrar los comunicados que ven los fieles en la aplicación.</p>
+        <a href="/">Volver al inicio</a>
+    </div>
+</div>
+
+<script>
+    document.getElementById('btnCerrarSesion').addEventListener('click', async () => {
+        try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (error) {}
+        window.location.href = '/login';
+    });
+</script>
+
+</body>
+</html>

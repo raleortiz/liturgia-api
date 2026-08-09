@@ -56,9 +56,13 @@
         </div>
 
         <!-- 🟦 FRANJA AZUL CON TEXTOS: Se expande automáticamente usando flex: 1 -->
-        <div style="flex: 1; background: #007bff; color: white; border-radius: 8px; padding: 0 20px; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <h1 style="font-size: 22px; margin: 0; font-weight: bold;">Administrador de Música</h1>
-            <p style="font-size: 13px; margin: 2px 0 0 0; opacity: 0.9;">Añade, edita o elimina las canciones de la aplicación al instante</p>
+        <div style="flex: 1; background: #007bff; color: white; border-radius: 8px; padding: 0 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <div style="flex: 1;">
+                <h1 style="font-size: 22px; margin: 0; font-weight: bold;">Administrador de Música</h1>
+                <p style="font-size: 13px; margin: 2px 0 0 0; opacity: 0.9;">Añade, edita o elimina las canciones de la aplicación al instante</p>
+            </div>
+            <button type="button" id="btnVolverInicio" style="background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; width: auto; font-weight: normal; white-space: nowrap;">Inicio</button>
+            <button type="button" id="btnCerrarSesion" style="background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; width: auto; font-weight: normal; white-space: nowrap;">Cerrar sesión</button>
         </div>
 
     </header>
@@ -136,11 +140,39 @@
 </div>
 
 <script>
-    const API_URL = 'https://liturgia-api-jfyu.onrender.com/api/canciones';
-    //Localmente para pruebas:
-    //const API_URL = '/api/canciones';
+    const API_URL = '/api/canciones';
+    //Para apuntar al servidor remoto durante pruebas locales:
+    //const API_URL = 'https://liturgia-api-jfyu.onrender.com/api/canciones';
     let cancionSeleccionadaId = null;
     let todasCanciones = [];
+
+    // 🔒 Verifica que haya sesión activa; si no, manda al login
+    async function verificarSesion() {
+        try {
+            const response = await fetch('/api/auth/me');
+            if (!response.ok) {
+                window.location.href = '/login';
+                return false;
+            }
+            return true;
+        } catch (error) {
+            window.location.href = '/login';
+            return false;
+        }
+    }
+
+    // 🏠 Botón para volver a la página de inicio
+    document.getElementById('btnVolverInicio').addEventListener('click', () => {
+        window.location.href = '/';
+    });
+
+    // 🚪 Botón para cerrar sesión
+    document.getElementById('btnCerrarSesion').addEventListener('click', async () => {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (error) {}
+        window.location.href = '/login';
+    });
 
     // Función para obtener y listar canciones existentes
     async function obtenerCanciones() {
@@ -268,6 +300,11 @@
                 body: JSON.stringify(data)
             });
 
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+
             if (response.ok) {
                 alert(cancionSeleccionadaId ? '¡Canción actualizada correctamente!' : '¡Canción guardada correctamente!');
                 document.getElementById('formCancion').reset();
@@ -295,6 +332,11 @@
             const response = await fetch(`${API_URL}/${id}`, {
                 method: 'DELETE'
             });
+
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
 
             if (response.ok) {
                 alert('¡Canción eliminada correctamente!');
@@ -342,6 +384,11 @@
                 const response = await fetch(`${API_URL}/${cancionSeleccionadaId}`, {
                     method: 'DELETE'
                 });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
 
                 if (response.ok) {
                     alert('¡Canción eliminada correctamente!');
@@ -408,8 +455,12 @@
         radio.addEventListener('change', renderLista);
     });
     
-    // Cargar las canciones al abrir la página
-    obtenerCanciones();
+    // 🔒 Al abrir la página se verifica la sesión; si no hay, se redirige al login
+    (async () => {
+        if (await verificarSesion()) {
+            obtenerCanciones();
+        }
+    })();
 
 </script>
 

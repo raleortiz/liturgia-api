@@ -53,8 +53,24 @@ La app Flutter muestra el cancionero y el **panel de administración** permite
 gestionarlo sin tocar la base de datos.
 
 ### Panel de administración (HTML)
-Interfaz web incluida en la raíz del servidor (`public/admin.html`) para
-administrar las canciones.
+Interfaz web protegida por inicio de sesión. Hay **dos roles**:
+
+- **Superusuario** (tú, `raleortizb@gmail.com`): al entrar cae en `/superadmin`,
+  donde puede **registrar usuarios** y elegir a qué secciones puede entrar cada
+  uno. No puede ser editado ni eliminado.
+- **Usuarios (admin)**: al entrar, si solo tienen permiso para **una** sección se
+  les lleva directo a ella; si tienen permiso para varias (o ninguna), caen en
+  `/home`, donde eligen con los botones **🎵 Cancionero** y **💬 Mensaje** (solo
+  se muestran los que tienen habilitados). Si intentan abrir una sección sin
+  permiso, reciben un 403.
+
+| Página | Ruta | Quién entra |
+|--------|------|-------------|
+| Login | `/login` | Público |
+| Gestión de usuarios | `/superadmin` | Superusuario |
+| Página de inicio | `/home` | Usuarios con sesión |
+| Cancionero | `/cancionero` | Permiso `cancionero` |
+| Mensajes de la parroquia | `/mensajes` | Permiso `mensajes` (en construcción) |
 
 **👉 Panel de administración:** 
 https://liturgia-api-jfyu.onrender.com
@@ -78,10 +94,25 @@ https://liturgia-api-jfyu.onrender.com
 ### Canciones
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/api/canciones` | Listar todas las canciones |
-| POST | `/api/canciones` | Crear canción (`titulo`, `artista`, `url_audio` obligatorios; `clase`, `letra` opcionales) |
-| PUT | `/api/canciones/:id` | Actualizar canción |
-| DELETE | `/api/canciones/:id` | Eliminar canción |
+| GET | `/api/canciones` | Listar todas las canciones (público: la app Flutter la consume sin login) |
+| POST | `/api/canciones` | Crear canción (`titulo`, `artista`, `url_audio` obligatorios; `clase`, `letra` opcionales). **Requiere login admin** |
+| PUT | `/api/canciones/:id` | Actualizar canción. **Requiere login admin** |
+| DELETE | `/api/canciones/:id` | Eliminar canción. **Requiere login admin** |
+
+### Autenticación (panel admin)
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/api/auth/login` | Iniciar sesión con `email` y `password`. Devuelve una cookie `httpOnly` (JWT, 8h) |
+| POST | `/api/auth/logout` | Cerrar sesión (borra la cookie) |
+| GET | `/api/auth/me` | Devuelve el administrador de la sesión actual (`email`, `rol`, `permisos`) o 401 |
+
+### Gestión de usuarios (solo superusuario)
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/admin/usuarios` | Listar usuarios (sin contraseñas) |
+| POST | `/api/admin/usuarios` | Crear usuario: `email`, `password` (mín. 6) y `permisos` (`["cancionero","mensajes"]`) |
+| PUT | `/api/admin/usuarios/:id` | Editar `permisos` y/o `password` de un usuario |
+| DELETE | `/api/admin/usuarios/:id` | Eliminar usuario (el superusuario está protegido) |
 
 ### Liturgia
 | Método | Ruta | Descripción |
@@ -111,6 +142,7 @@ Servidor PostgreSQL en la nube (**Neon**). El servidor se conecta usando
 |-------|-------------|----------------|
 | `canciones` | Cancionero | Panel admin / API (se crea sola al arrancar Server1) |
 | `dias_liturgicos` | Lecturas del día | Server9 (scraper local diario) |
+| `admins` | Usuarios del panel admin (correo, contraseña cifrada, rol, permisos `['cancionero','mensajes']`) | Se crea y siembra el superusuario automáticamente al arrancar Server1 |
 
 ---
 
@@ -124,6 +156,15 @@ Servidor PostgreSQL en la nube (**Neon**). El servidor se conecta usando
   |----------|-------------|
   | `DATABASE_URL` | Cadena de conexión a PostgreSQL de Neon |
   | `PORT` | Puerto del servidor (Render lo asigna solo) |
+  | `JWT_SECRET` | Secreto para firmar la sesión del panel (¡cámbialo por uno propio en Render!) |
+  | `ADMIN_EMAIL` | Correo del superusuario inicial (por defecto `raleortizb@gmail.com`) |
+  | `ADMIN_PASSWORD` | Contraseña del superusuario inicial (solo se usa la primera vez para crearlo) |
+
+> ⚠️ Al desplegar, el superusuario se crea automáticamente en la tabla `admins`
+> la primera vez que el servidor arranca con `ADMIN_EMAIL`/`ADMIN_PASSWORD`
+> configuradas. Si ya se creó, cambiar esas variables **no** cambia la
+> contraseña existente: edítala directamente en la tabla `admins` de Neon (o
+> borra el registro para que se cree de nuevo).
 
 ### Server9 en tu PC
 - `npm install` y un `.env` con la **misma** `DATABASE_URL` de Neon.
