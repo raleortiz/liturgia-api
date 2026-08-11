@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descargar Aplicación</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 40px 35px;
+            width: 100%;
+            max-width: 480px;
+        }
+        .logo-box {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+            margin-bottom: 18px;
+        }
+        .logo-box img { max-width: 85%; max-height: 85%; object-fit: contain; }
+        h1 { font-size: 22px; color: #333; margin-bottom: 8px; text-align: center; }
+        p.sub { font-size: 14px; color: #666; margin-bottom: 25px; text-align: center; }
+        .btn-descarga {
+            display: block;
+            width: 100%;
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 17px;
+            font-weight: bold;
+            text-decoration: none;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 25px;
+        }
+        .btn-descarga:hover { background: #218838; }
+        h2 { font-size: 16px; color: #333; margin: 15px 0 10px; }
+        ol, ul { padding-left: 20px; margin-bottom: 15px; }
+        li { font-size: 14px; color: #555; margin-bottom: 8px; line-height: 1.5; }
+        .aviso {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 8px;
+            padding: 12px 15px;
+            font-size: 13px;
+            color: #856404;
+            margin-bottom: 20px;
+        }
+        .nota { font-size: 12px; color: #999; text-align: center; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Descargar Aplicación</h1>
+        <p class="sub">Descarga el APK e instálalo en tu dispositivo Android</p>
+
+        <div class="aviso">
+            <strong>Importante:</strong> el APK no está firmado, por lo que Android te pedirá autorización para instalar desde fuentes desconocidas.
+        </div>
+
+        <a class="btn-descarga" href="/descargar">📱 Descargar APK</a>
+
+        <h2>Pasos para instalar</h2>
+        <ol>
+            <li>Descarga el archivo APK con el botón de arriba.</li>
+            <li>Abre el archivo descargado (búscalo en "Descargas").</li>
+            <li>Cuando Android lo bloqueé, toca <strong>"Configuración"</strong> y activa <strong>"Permitir desde esta fuente"</strong> (fuentes desconocidas).</li>
+            <li>Vuelve atrás y toca <strong>"Instalar"</strong>.</li>
+            <li>Al finalizar, toca <strong>"Abrir"</strong> para usar la aplicación.</li>
+        </ol>
+
+        <p class="nota">Solo para Android. Requiere permitir fuentes desconocidas.</p>
+    </div>
+</body>
+</html>

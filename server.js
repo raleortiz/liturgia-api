@@ -91,6 +91,36 @@ const requiereSuperadmin = async (req, res, next) => {
   next();
 };
 
+// 📥 Redirige a la última release del APK en GitHub (con caché de 10 min)
+const cacheApk = { url: null, ts: 0 };
+const REPO_RELEASES = 'https://api.github.com/repos/raleortiz/liturgia-api/releases/latest';
+
+async function obtenerUrlApk() {
+  if (cacheApk.url && Date.now() - cacheApk.ts < 10 * 60 * 1000) return cacheApk.url;
+  const respuesta = await fetch(REPO_RELEASES, { headers: { 'User-Agent': 'liturgia-server' } });
+  if (!respuesta.ok) throw new Error('GitHub API error ' + respuesta.status);
+  const data = await respuesta.json();
+  const apk = (data.assets || []).find((a) => a.name.endsWith('.apk'));
+  if (!apk) throw new Error('No hay APK en la última release');
+  cacheApk.url = apk.browser_download_url;
+  cacheApk.ts = Date.now();
+  return apk.browser_download_url;
+}
+
+app.get('/descargar', async (req, res) => {
+  try {
+    const url = await obtenerUrlApk();
+    res.redirect(url);
+  } catch (e) {
+    res.status(502).send('No se pudo obtener el enlace de descarga. Inténtalo más tarde.');
+  }
+});
+
+// 📥 Página pública de descarga del APK (no requiere login)
+app.get('/descarga', (req, res) => {
+  res.sendFile(__dirname + '/public/descarga.html');
+});
+
 // 🚪 Página de login (pública)
 app.get('/login', (req, res) => {
   if (verificarToken(req)) return res.redirect('/');
