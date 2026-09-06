@@ -409,6 +409,101 @@ app.put('/api/canciones/:id', requierePermisoApi('cancionero'), async (req, res)
   }
 });
 
+// 3.3 RUTAS DEL MENSAJE DE LA PARROQUIA
+// GET público: descarga la imagen publicada (sin login)
+app.get('/api/mensaje-parroquia/imagen', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT imagen, tipo_mime FROM mensaje_parroquia WHERE id = 1'
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No hay imagen publicada.' });
+    }
+    const fila = result.rows[0];
+    res.set('Content-Type', fila.tipo_mime);
+    res.set('Cache-Control', 'no-store');
+    res.send(fila.imagen);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener la imagen.' });
+  }
+});
+
+// GET público: metadatos del mensaje publicado (opcional)
+app.get('/api/mensaje-parroquia', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT actualizado_en, tipo_mime, nombre FROM mensaje_parroquia WHERE id = 1'
+    );
+    if (result.rows.length === 0) {
+      return res.json({ existe: false });
+    }
+    res.json({ existe: true, ...result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener el mensaje de la parroquia.' });
+  }
+});
+
+// POST protegido: sube o reemplaza la imagen (UPSERT sobre id = 1)
+const TAMANO_MAX_IMAGEN = 5 * 1024 * 1024; // ~5 MB
+
+app.post('/api/mensaje-parroquia/imagen', requierePermisoApi('mensajes'), async (req, res) => {
+  const { imagen_base64, tipo_mime, nombre } = req.body || {};
+
+  if (!imagen_base64 || typeof imagen_base64 !== 'string' || !imagen_base64.trim()) {
+    return res.status(400).json({ error: 'Falta la imagen en base64.' });
+  }
+  if (!tipo_mime || !String(tipo_mime).startsWith('image/')) {
+    return res.status(400).json({ error: 'El archivo debe ser una imagen (image/*).' });
+  }
+
+  let buffer;
+  try {
+    buffer = Buffer.from(imagen_base64, 'base64');
+  } catch (e) {
+    return res.status(400).json({ error: 'La imagen en base64 no es válida.' });
+  }
+
+  if (buffer.length === 0) {
+    return res.status(400).json({ error: 'La imagen está vacía.' });
+  }
+  if (buffer.length > TAMANO_MAX_IMAGEN) {
+    return res.status(400).json({ error: 'La imagen supera el tamaño máximo de 5 MB.' });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO mensaje_parroquia (id, imagen, tipo_mime, nombre, actualizado_en)
+       VALUES (1, $1, $2, $3, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         imagen = EXCLUDED.imagen,
+         tipo_mime = EXCLUDED.tipo_mime,
+         nombre = EXCLUDED.nombre,
+         actualizado_en = NOW()`,
+      [buffer, tipo_mime, nombre || null]
+    );
+    res.json({ message: 'Imagen publicada con éxito.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al guardar la imagen.' });
+  }
+});
+
+// DELETE protegido: borra la imagen publicada
+app.delete('/api/mensaje-parroquia/imagen', requierePermisoApi('mensajes'), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM mensaje_parroquia WHERE id = 1');
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'No hay imagen publicada.' });
+    }
+    res.json({ message: 'Imagen eliminada.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al eliminar la imagen.' });
+  }
+});
+
 // 4. FUNCIÓN AUTOMÁTICA DE LA TABLA (MOVER ARRIBA)
 const inicializarTablaCanciones = async () => {
   const querySQL = `
@@ -479,6 +574,27 @@ const inicializarTablaAdmins = async () => {
 };
 
 inicializarTablaAdmins();
+
+// 4.2 TABLA DEL MENSAJE DE LA PARROQUIA (UNA SOLA FILA, id = 1)
+const inicializarTablaMensajeParroquia = async () => {
+  const querySQL = `
+    CREATE TABLE IF NOT EXISTS mensaje_parroquia (
+        id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        imagen BYTEA NOT NULL,
+        tipo_mime TEXT NOT NULL,
+        nombre TEXT,
+        actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  try {
+    await pool.query(querySQL);
+    console.log("✅ Base de datos lista: Tabla 'mensaje_parroquia' verificada.");
+  } catch (err) {
+    console.error("❌ Error al intentar inicializar la tabla 'mensaje_parroquia':", err);
+  }
+};
+
+inicializarTablaMensajeParroquia();
 
 // 5. Fuente 1: liturgiadelashoras.github.io (Primera/Segunda Lectura, Salmo) ----------
 
@@ -742,6 +858,8 @@ async function autoDiagnostico() {
     { nombre: 'Lecturas de hoy', metodo: 'GET', url: `${base}/api/lecturas/hoy` },
     { nombre: 'Lecturas fecha fija (2026/7/28)', metodo: 'GET', url: `${base}/api/lecturas/2026/7/28` },
     { nombre: 'Mes inválido (debe dar 400)', metodo: 'GET', url: `${base}/api/lecturas/2026/13/28` },
+    { nombre: 'Mensaje parroquia (metadatos)', metodo: 'GET', url: `${base}/api/mensaje-parroquia` },
+    { nombre: 'Mensaje parroquia (imagen)', metodo: 'GET', url: `${base}/api/mensaje-parroquia/imagen` },
   ];
 
   for (const prueba of pruebas) {
