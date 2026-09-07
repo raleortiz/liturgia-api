@@ -1,8 +1,8 @@
 # Liturgia API ⛪
 
 Backend de la aplicación **Parroquia San Ter de Jesús**: sirve las lecturas
-litúrgicas del día (según el calendario de Colombia) y el cancionero, con un
-panel de administración para gestionar las canciones.
+litúrgicas del día (según el calendario de Colombia), el cancionero y los
+mensajes de la parroquia, con un panel de administración para gestionarlos.
 
 ---
 
@@ -15,21 +15,23 @@ APP FLUTTER (celular)
 ┌─────────────────────────────┐      ┌─────────────────────────────┐
 │  SERVER1 (Render)           │      │  SERVER9 (local, tu PC)     │
 │  API REST + Panel admin     │      │  Scraper de lecturas        │
-│  HTML para las canciones    │      │  corre 1 vez al día         │
+│  HTML (canciones + fotos)   │      │  corre 1 vez al día         │
 └──────────────┬──────────────┘      └──────────────┬──────────────┘
                │                                   │
                ▼                                   ▼
         ┌───────────────────────────────────────────────┐
         │   BASE DE DATOS PostgreSQL (NEON)             │
-        │   tablas: canciones, dias_liturgicos          │
+        │   tablas: canciones, dias_liturgicos,         │
+        │   admins, mensaje_parroquia_fotos             │
         └───────────────────────────────────────────────┘
 ```
 
 **Dos partes:**
 
 1. **Server1 — backend en la nube (Render).** API REST + un **panel de
-   administración en HTML** para agregar, editar y eliminar las **canciones**
-   del cancionero. Se conecta a la base de datos de **Neon**.
+   administración en HTML** para gestionar el **cancionero** (agregar, editar y
+   eliminar canciones) y publicar el **mensaje de la parroquia** (hasta 5
+   fotos). Se conecta a la base de datos de **Neon**.
 2. **Server9 — scraper local.** Corre en tu PC (no en la nube): cada día saca
    las **citas bíblicas del día según el calendario de Colombia** desde el
    sitio de Ordo Colombiano y las guarda en la misma base de datos de Neon.
@@ -52,6 +54,14 @@ CRUD completo del cancionero: **título, artista, clase, URL de audio y letra**.
 La app Flutter muestra el cancionero y el **panel de administración** permite
 gestionarlo sin tocar la base de datos.
 
+### Mensaje de la Parroquia
+La secretaria publica **hasta 5 fotos** (avisos y comunicados) desde el panel
+web `/mensajes`. La app Flutter las muestra a los fieles. Antes de subirlas, el
+navegador **redimensiona automáticamente** las imágenes muy grandes (máx.
+1600px, convertidas a JPEG), y se guardan en la tabla `mensaje_parroquia_fotos`
+en posiciones 1-5. El panel las muestra en línea y con los botones **◀ ▶** la
+secretaria se desplaza entre las posiciones para subir o eliminar cada foto.
+
 ### Panel de administración (HTML)
 Interfaz web protegida por inicio de sesión. Hay **dos roles**:
 
@@ -70,7 +80,12 @@ Interfaz web protegida por inicio de sesión. Hay **dos roles**:
 | Gestión de usuarios | `/superadmin` | Superusuario |
 | Página de inicio | `/home` | Usuarios con sesión |
 | Cancionero | `/cancionero` | Permiso `cancionero` |
-| Mensajes de la parroquia | `/mensajes` | Permiso `mensajes` (en construcción) |
+| Mensajes de la parroquia | `/mensajes` | Permiso `mensajes` |
+
+> El panel **Cancionero** (`/cancionero`) permite agregar, editar y eliminar
+> canciones. El panel **Mensaje** (`/mensajes`) muestra las 5 fotos en línea;
+> con **◀ ▶** te desplazas entre posiciones y puedes subir una foto nueva o
+> eliminar la de la posición seleccionada.
 
 **👉 Panel de administración:** 
 https://liturgia-api-jfyu.onrender.com
@@ -99,6 +114,16 @@ https://liturgia-api-jfyu.onrender.com
 | PUT | `/api/canciones/:id` | Actualizar canción. **Requiere login admin** |
 | DELETE | `/api/canciones/:id` | Eliminar canción. **Requiere login admin** |
 
+### Mensaje de la Parroquia
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/mensaje-parroquia/fotos` | Listar las 5 posiciones (público). Devuelve `{ fotos, total }` con `existe`, `tipo_mime`, `nombre`, `actualizado_en` y `url` por posición |
+| GET | `/api/mensaje-parroquia/fotos/:posicion/imagen` | Descargar la foto de una posición (público, `posicion` de 1 a 5). **404** si está vacía. Envía `Content-Type: tipo_mime` y `Cache-Control: no-store` |
+| POST | `/api/mensaje-parroquia/fotos/:posicion/imagen` | Subir o reemplazar la foto de una posición (JSON `imagen_base64`, `tipo_mime`, `nombre`; tamaño máx. 5 MB, body JSON límite 8 MB). **Requiere permiso `mensajes`** |
+| DELETE | `/api/mensaje-parroquia/fotos/:posicion/imagen` | Eliminar la foto de una posición. **Requiere permiso `mensajes`** |
+| GET | `/api/mensaje-parroquia/imagen` | *Compatibilidad:* descarga la primera foto (posición 1) para la app actual |
+| GET | `/api/mensaje-parroquia` | *Compatibilidad:* metadatos de la primera foto (`existe`, `actualizado_en`, `tipo_mime`, `nombre`) |
+
 ### Autenticación (panel admin)
 | Método | Ruta | Descripción |
 |--------|------|-------------|
@@ -124,7 +149,14 @@ https://liturgia-api-jfyu.onrender.com
 ### Otros
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/` | Panel de administración (`public/admin.html`) |
+| GET | `/` | Redirige según permisos: `/cancionero`, `/mensajes`, `/home` o `/superadmin` |
+| GET | `/login` | Página de inicio de sesión (pública) |
+| GET | `/home` | Página de inicio con botones de sección |
+| GET | `/cancionero` | Panel de administración de canciones (permiso `cancionero`) |
+| GET | `/mensajes` | Panel de mensajes de la parroquia (permiso `mensajes`) |
+| GET | `/superadmin` | Gestión de usuarios (solo superusuario) |
+| GET | `/descarga` | Página pública de descarga del APK |
+| GET | `/descargar` | Redirige a la última release del APK en GitHub |
 
 ### Server9 (solo local)
 | Método | Ruta | Descripción |
@@ -143,6 +175,7 @@ Servidor PostgreSQL en la nube (**Neon**). El servidor se conecta usando
 | `canciones` | Cancionero | Panel admin / API (se crea sola al arrancar Server1) |
 | `dias_liturgicos` | Lecturas del día | Server9 (scraper local diario) |
 | `admins` | Usuarios del panel admin (correo, contraseña cifrada, rol, permisos `['cancionero','mensajes']`) | Se crea y siembra el superusuario automáticamente al arrancar Server1 |
+| `mensaje_parroquia_fotos` | Fotos del mensaje (máx. 5, posiciones 1-5: `imagen` BYTEA, `tipo_mime`, `nombre`) | Panel admin / API (se crea sola al arrancar Server1) |
 
 ---
 
