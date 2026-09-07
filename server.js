@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 // 1. CONFIGURACIÓN DEL CONFIG DE EXPRESS Y PERMISOS (DEBE IR PRIMERO)
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 app.set('trust proxy', 1);
 
 // 1.1 SEGURIDAD DEL PANEL ADMIN: LOGIN CON USUARIO (EMAIL) Y CONTRASEÑA
@@ -409,15 +409,57 @@ app.put('/api/canciones/:id', requierePermisoApi('cancionero'), async (req, res)
   }
 });
 
-// 3.3 RUTAS DEL MENSAJE DE LA PARROQUIA
-// GET público: descarga la imagen publicada (sin login)
-app.get('/api/mensaje-parroquia/imagen', async (req, res) => {
+// 3.3 RUTAS DEL MENSAJE DE LA PARROQUIA (5 FOTOS EN UNA FILA)
+const TAMANO_MAX_IMAGEN = 5 * 1024 * 1024; // ~5 MB por foto
+const MAX_POSICIONES = 5;
+
+// Valida que la posición sea un entero entre 1 y 5
+function posicionValida(n) {
+  const p = Number.parseInt(n, 10);
+  return Number.isInteger(p) && p >= 1 && p <= MAX_POSICIONES;
+}
+
+// GET público: lista de las 5 posiciones (metadatos + URL de cada foto)
+app.get('/api/mensaje-parroquia/fotos', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT imagen, tipo_mime FROM mensaje_parroquia WHERE id = 1'
+      `SELECT posicion, tipo_mime, nombre, actualizado_en
+       FROM mensaje_parroquia_fotos WHERE posicion BETWEEN 1 AND $1`,
+      [MAX_POSICIONES]
+    );
+    const disponibles = result.rows;
+    const fotos = [];
+    for (let p = 1; p <= MAX_POSICIONES; p++) {
+      const fila = disponibles.find(f => f.posicion === p);
+      fotos.push({
+        posicion: p,
+        existe: !!fila,
+        tipo_mime: fila ? fila.tipo_mime : null,
+        nombre: fila ? fila.nombre : null,
+        actualizado_en: fila ? fila.actualizado_en : null,
+        url: `/api/mensaje-parroquia/fotos/${p}/imagen`
+      });
+    }
+    res.json({ fotos, total: MAX_POSICIONES });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener las fotos.' });
+  }
+});
+
+// GET público: descarga la foto de una posición
+app.get('/api/mensaje-parroquia/fotos/:posicion/imagen', async (req, res) => {
+  const p = Number.parseInt(req.params.posicion, 10);
+  if (!posicionValida(p)) {
+    return res.status(400).json({ error: 'Posición inválida (debe ser 1-5).' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT imagen, tipo_mime FROM mensaje_parroquia_fotos WHERE posicion = $1',
+      [p]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'No hay imagen publicada.' });
+      return res.status(404).json({ error: 'No hay foto en esta posición.' });
     }
     const fila = result.rows[0];
     res.set('Content-Type', fila.tipo_mime);
@@ -425,30 +467,16 @@ app.get('/api/mensaje-parroquia/imagen', async (req, res) => {
     res.send(fila.imagen);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Error al obtener la imagen.' });
+    res.status(500).json({ error: 'Error al obtener la foto.' });
   }
 });
 
-// GET público: metadatos del mensaje publicado (opcional)
-app.get('/api/mensaje-parroquia', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT actualizado_en, tipo_mime, nombre FROM mensaje_parroquia WHERE id = 1'
-    );
-    if (result.rows.length === 0) {
-      return res.json({ existe: false });
-    }
-    res.json({ existe: true, ...result.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al obtener el mensaje de la parroquia.' });
+// POST protegido: sube o reemplaza la foto en una posición
+app.post('/api/mensaje-parroquia/fotos/:posicion/imagen', requierePermisoApi('mensajes'), async (req, res) => {
+  const p = Number.parseInt(req.params.posicion, 10);
+  if (!posicionValida(p)) {
+    return res.status(400).json({ error: 'Posición inválida (debe ser 1-5).' });
   }
-});
-
-// POST protegido: sube o reemplaza la imagen (UPSERT sobre id = 1)
-const TAMANO_MAX_IMAGEN = 5 * 1024 * 1024; // ~5 MB
-
-app.post('/api/mensaje-parroquia/imagen', requierePermisoApi('mensajes'), async (req, res) => {
   const { imagen_base64, tipo_mime, nombre } = req.body || {};
 
   if (!imagen_base64 || typeof imagen_base64 !== 'string' || !imagen_base64.trim()) {
@@ -474,33 +502,73 @@ app.post('/api/mensaje-parroquia/imagen', requierePermisoApi('mensajes'), async 
 
   try {
     await pool.query(
-      `INSERT INTO mensaje_parroquia (id, imagen, tipo_mime, nombre, actualizado_en)
-       VALUES (1, $1, $2, $3, NOW())
-       ON CONFLICT (id) DO UPDATE SET
+      `INSERT INTO mensaje_parroquia_fotos (posicion, imagen, tipo_mime, nombre, actualizado_en)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (posicion) DO UPDATE SET
          imagen = EXCLUDED.imagen,
          tipo_mime = EXCLUDED.tipo_mime,
          nombre = EXCLUDED.nombre,
          actualizado_en = NOW()`,
-      [buffer, tipo_mime, nombre || null]
+      [p, buffer, tipo_mime, nombre || null]
     );
-    res.json({ message: 'Imagen publicada con éxito.' });
+    res.json({ message: `Foto en la posición ${p} publicada con éxito.` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Error al guardar la imagen.' });
+    res.status(500).json({ error: 'Error al guardar la foto.' });
   }
 });
 
-// DELETE protegido: borra la imagen publicada
-app.delete('/api/mensaje-parroquia/imagen', requierePermisoApi('mensajes'), async (req, res) => {
+// DELETE protegido: borra la foto de una posición
+app.delete('/api/mensaje-parroquia/fotos/:posicion/imagen', requierePermisoApi('mensajes'), async (req, res) => {
+  const p = Number.parseInt(req.params.posicion, 10);
+  if (!posicionValida(p)) {
+    return res.status(400).json({ error: 'Posición inválida (debe ser 1-5).' });
+  }
   try {
-    const result = await pool.query('DELETE FROM mensaje_parroquia WHERE id = 1');
+    const result = await pool.query('DELETE FROM mensaje_parroquia_fotos WHERE posicion = $1', [p]);
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'No hay imagen publicada.' });
+      return res.status(404).json({ error: 'No hay foto en esta posición.' });
     }
-    res.json({ message: 'Imagen eliminada.' });
+    res.json({ message: `Foto de la posición ${p} eliminada.` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Error al eliminar la imagen.' });
+    res.status(500).json({ error: 'Error al eliminar la foto.' });
+  }
+});
+
+// 🔙 COMPATIBILIDAD (app Flutter actual): el endpoint antiguo de UNA imagen
+// ahora responde con la primera foto publicada (posición 1).
+app.get('/api/mensaje-parroquia/imagen', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT imagen, tipo_mime FROM mensaje_parroquia_fotos WHERE posicion = 1'
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No hay imagen publicada.' });
+    }
+    const fila = result.rows[0];
+    res.set('Content-Type', fila.tipo_mime);
+    res.set('Cache-Control', 'no-store');
+    res.send(fila.imagen);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener la imagen.' });
+  }
+});
+
+// GET público (alias): metadatos de la primera foto
+app.get('/api/mensaje-parroquia', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT actualizado_en, tipo_mime, nombre FROM mensaje_parroquia_fotos WHERE posicion = 1'
+    );
+    if (result.rows.length === 0) {
+      return res.json({ existe: false });
+    }
+    res.json({ existe: true, ...result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener el mensaje de la parroquia.' });
   }
 });
 
@@ -575,11 +643,11 @@ const inicializarTablaAdmins = async () => {
 
 inicializarTablaAdmins();
 
-// 4.2 TABLA DEL MENSAJE DE LA PARROQUIA (UNA SOLA FILA, id = 1)
-const inicializarTablaMensajeParroquia = async () => {
+// 4.2 TABLA DE LAS FOTOS DEL MENSAJE DE LA PARROQUIA (5 POSICIONES)
+const inicializarTablaMensajeParroquiaFotos = async () => {
   const querySQL = `
-    CREATE TABLE IF NOT EXISTS mensaje_parroquia (
-        id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    CREATE TABLE IF NOT EXISTS mensaje_parroquia_fotos (
+        posicion INT PRIMARY KEY CHECK (posicion BETWEEN 1 AND 5),
         imagen BYTEA NOT NULL,
         tipo_mime TEXT NOT NULL,
         nombre TEXT,
@@ -588,13 +656,13 @@ const inicializarTablaMensajeParroquia = async () => {
   `;
   try {
     await pool.query(querySQL);
-    console.log("✅ Base de datos lista: Tabla 'mensaje_parroquia' verificada.");
+    console.log("✅ Base de datos lista: Tabla 'mensaje_parroquia_fotos' verificada.");
   } catch (err) {
-    console.error("❌ Error al intentar inicializar la tabla 'mensaje_parroquia':", err);
+    console.error("❌ Error al intentar inicializar la tabla 'mensaje_parroquia_fotos':", err);
   }
 };
 
-inicializarTablaMensajeParroquia();
+inicializarTablaMensajeParroquiaFotos();
 
 // 5. Fuente 1: liturgiadelashoras.github.io (Primera/Segunda Lectura, Salmo) ----------
 
@@ -860,6 +928,8 @@ async function autoDiagnostico() {
     { nombre: 'Mes inválido (debe dar 400)', metodo: 'GET', url: `${base}/api/lecturas/2026/13/28` },
     { nombre: 'Mensaje parroquia (metadatos)', metodo: 'GET', url: `${base}/api/mensaje-parroquia` },
     { nombre: 'Mensaje parroquia (imagen)', metodo: 'GET', url: `${base}/api/mensaje-parroquia/imagen` },
+    { nombre: 'Fotos del mensaje (lista)', metodo: 'GET', url: `${base}/api/mensaje-parroquia/fotos` },
+    { nombre: 'Foto del mensaje (posición 1)', metodo: 'GET', url: `${base}/api/mensaje-parroquia/fotos/1/imagen` },
   ];
 
   for (const prueba of pruebas) {
